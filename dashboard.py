@@ -1,14 +1,13 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import io
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="SSC 2026 Dashboard", layout="wide")
+st.set_page_config(page_title="SSC 2026 Explorer", layout="wide")
 
-# Custom CSS for styling metrics
+# Custom CSS for metric cards
 st.markdown("""
 <style>
     div[data-testid="metric-container"] {
@@ -21,20 +20,196 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 2. DATA EMBEDDING (April 2026 Data)
+# 2. DATA LOADING (Dynamic from CSV files)
+# -----------------------------------------------------------------------------
+@st.cache_data
+def load_data():
+    # --- A. REGIONAL PERFORMANCE ---
+    df_regional = pd.read_csv("Explorer Quest April 2026.xlsx - Region Performance Comparison .csv")
+    # Clean Data
+    df_regional = df_regional[df_regional['Region'] != 'Grand Total'] # Drop Grand Total
+    df_regional['Region'] = df_regional['Region'].str.strip() # Fix trailing spaces (e.g., "Sarawak ")
+    df_regional = df_regional.rename(columns={
+        'Sum of Pass': 'Pass',
+        'Sum of Fail': 'Fail',
+        'Sum of Total Headcount': 'Total Headcount'
+    })
+
+    # --- B. OUTLET PERFORMANCE ---
+    regions = ['Central', 'East Coast', 'Northern', 'Southern', 'Sabah', 'Sarawak']
+    outlet_dfs = []
+    
+    for region in regions:
+        filename = f"Explorer Quest April 2026.xlsx - {region}.csv"
+        df_temp = pd.read_csv(filename)
+        
+        # Handle variations in column names ('Outlet' vs 'Outlets')
+        outlet_col = 'Outlets' if 'Outlets' in df_temp.columns else 'Outlet'
+        
+        # Clean and rename
+        df_temp = df_temp.rename(columns={
+            outlet_col: 'Outlet',
+            'Sum of Pass': 'Pass',
+            'Sum of Fail': 'Fail',
+            'Sum of Total Crew': 'Total'
+        })
+        df_temp['Region'] = region
+        
+        # Drop "Total" and "Grand Total" rows (e.g., Sarawak has both)
+        df_temp = df_temp[~df_temp['Outlet'].isin(['Total', 'Grand Total'])]
+        outlet_dfs.append(df_temp)
+        
+    # Combine all regions into one DataFrame
+    df_outlets = pd.concat(outlet_dfs, ignore_index=True)
+
+    # --- C. LOB COMPARISON ---
+    df_lob = pd.read_csv("Explorer Quest April 2026.xlsx - LOB COMPARISON.csv")
+    df_lob = df_lob[df_lob['LOB'] != 'Grand Total'] # Drop Grand total
+    
+    # Rename columns to remove "Sum of " and change "LOB" to "Result"
+    rename_dict = {col: col.replace('Sum of ', '') for col in df_lob.columns}
+    rename_dict['LOB'] = 'Result'
+    df_lob = df_lob.rename(columns=rename_dict)
+    df_lob.columns = df_lob.columns.str.strip() # Ensure no trailing spaces in region names
+
+    return df_regional, df_outlets, df_lob
+
+# Load the data
+try:
+    df_regional, df_outlets, df_lob = load_data()
+except FileNotFoundError as e:
+    st.error(f"Error loading data: {e}. Please ensure the CSV files are in the same folder as this script.")
+    st.stop()
+
+# Function to clean and structure LOB data
+def process_lob_data(df):
+    # Melt to long format
+    df_long = df.melt(id_vars=['Result'], var_name='Region', value_name='Count')
+    
+    # Extract Status (Pass/Fail) and Product
+    df_long['Status'] = df_long['Result'].apply(lambda x: 'Pass' if '(Pass)' in x else 'Fail')
+    df_long['Product'] = df_long['Result'].apply(lambda x: x.split(' (')[0])
+    
+    # Convert Count to numeric just in case, and filter out 0 counts
+    df_long['Count'] = pd.to_numeric(df_long['Count'], errors='coerce').fillna(0)
+    df_long = df_long[df_long['Count'] > 0]
+    
+    return df_long
+
+# -----------------------------------------------------------------------------
+# 3. SIDEBAR NAVIGATION
+# -----------------------------------------------------------------------------
+with st.sidebar:
+    # Use a try-except block just in case the image is missing
+    try:
+        st.image("Main Banner.png")
+    except:
+        pass # Skips image if not found
+    
+    st.header("SSC 2026 : Explorer iPhone & Apple Watch")
+    view_selection = st.selectbox(
+        "Select Dataset:",
+        ["Regional Performance", "Outlet Performance", "LOB Comparison"]
+    )
+    st.markdown("---")
+    st.caption("© 2026 SSC 2026 | Insight Team")
+
+# -----------------------------------------------------------------------------
+# 4. MAIN LOGIC
 # -----------------------------------------------------------------------------
 
-# --- LOB COMPARISON ---
-csv_lob = """LOB,Sum of Sarawak,Sum of Sabah,Sum of East Coast,Sum of Southern,Sum of Northern,Sum of Central
-Apple Watch & iPhone (Fail),27,43,20,69,64,84
-Apple Watch & iPhone (Pass),33,23,25,34,64,48
-iPad (Fail),21,44,24,67,57,84
-iPad (Pass),39,22,21,36,70,48
-Mac (Fail),12,45,19,44,65,97
-Mac (Pass),48,21,26,59,62,35
-Grand Total,180,198,135,309,382,396""".strip()
+st.title(f"📊 {view_selection}")
 
-# --- REGION PERFORMANCE ---
+# Initialize variables
+fig = None
+display_df = None
+total_vol = 0
+total_pass = 0
+total_fail = 0
+
+# --- LOGIC: REGIONAL VIEW ---
+if view_selection == "Regional Performance":
+    display_df = df_regional
+    
+    total_pass = display_df['Pass'].sum()
+    total_fail = display_df['Fail'].sum()
+    total_vol = display_df['Total Headcount'].sum()
+    
+    # Chart
+    chart_df = display_df.melt(id_vars=['Region'], value_vars=['Pass', 'Fail'], var_name='Status', value_name='Count')
+    fig = px.bar(chart_df, x='Region', y='Count', color='Status', barmode='group',
+                 text_auto=True,
+                 color_discrete_map={'Pass': '#00CC96', 'Fail': '#EF553B'},
+                 title="Pass vs Fail by Region")
+
+# --- LOGIC: OUTLET VIEW ---
+elif view_selection == "Outlet Performance":
+    
+    selected_region_filter = st.selectbox("Filter by Region:", ["All"] + list(df_outlets['Region'].unique()))
+    
+    if selected_region_filter != "All":
+        display_df = df_outlets[df_outlets['Region'] == selected_region_filter]
+    else:
+        display_df = df_outlets
+
+    total_pass = display_df['Pass'].sum()
+    total_fail = display_df['Fail'].sum()
+    total_vol = display_df['Total'].sum()
+    
+    # Chart
+    chart_df = display_df.melt(id_vars=['Outlet'], value_vars=['Pass', 'Fail'], var_name='Status', value_name='Count')
+    
+    # Sort by Volume so biggest outlets are first
+    chart_df = chart_df.sort_values(by='Count', ascending=False)
+    
+    fig = px.bar(chart_df, x='Outlet', y='Count', color='Status', barmode='group',
+                 text_auto=True,
+                 color_discrete_map={'Pass': '#00CC96', 'Fail': '#EF553B'},
+                 title=f"Outlet Performance ({selected_region_filter})")
+
+# --- LOGIC: LOB VIEW ---
+elif view_selection == "LOB Comparison":
+    processed_lob = process_lob_data(df_lob)
+    display_df = processed_lob[['Region', 'Product', 'Status', 'Count']]
+    
+    total_pass = processed_lob[processed_lob['Status'] == 'Pass']['Count'].sum()
+    total_fail = processed_lob[processed_lob['Status'] == 'Fail']['Count'].sum()
+    total_vol = total_pass + total_fail
+    
+    # Chart
+    fig = px.bar(processed_lob, x='Product', y='Count', color='Status', 
+                 color_discrete_map={'Pass': '#00CC96', 'Fail': '#EF553B'},
+                 text_auto=True,
+                 facet_col='Region', title="Product Performance by Region")
+    fig.update_xaxes(matches=None) 
+
+# -----------------------------------------------------------------------------
+# 5. DASHBOARD LAYOUT (KPIs -> Chart -> Table)
+# -----------------------------------------------------------------------------
+
+pass_rate = (total_pass / total_vol) * 100 if total_vol > 0 else 0
+
+# Row 1: KPI Cards
+st.subheader("1. Key Performance Indicators")
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total Volume", f"{int(total_vol):,}")
+col2.metric("Total Pass", f"{int(total_pass):,}")
+col3.metric("Total Fail", f"{int(total_fail):,}")
+col4.metric("Pass Rate", f"{pass_rate:.1f}%")
+
+st.markdown("---")
+
+# Row 2: Charts
+st.subheader("2. Graphical Analysis")
+if fig:
+    st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
+# Row 3: Data Table
+st.subheader("3. Source Data")
+with st.expander("View Data Table", expanded=True):
+    st.dataframe(display_df, use_container_width=True)# --- REGION PERFORMANCE ---
 csv_regional = """Region,Sum of Pass,Sum of Fail,Sum of Total Headcount
 Central,35,97,132
 East Coast,26,19,45
