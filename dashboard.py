@@ -169,8 +169,8 @@ def process_lob_data(df):
 # 3. SIDEBAR NAVIGATION
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    # Optional: st.image("Main Banner.png")
-    st.header("Explorer Quest April 2026")
+    st.image("Main Banner.png")
+    st.header("SSC 2026 : Explorer iPhone & Apple Watch")
     view_selection = st.selectbox(
         "Select Dataset:",
         ["Regional Performance", "Outlet Performance", "LOB Comparison"]
