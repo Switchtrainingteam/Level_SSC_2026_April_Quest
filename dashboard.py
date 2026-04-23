@@ -26,8 +26,8 @@ st.markdown("""
 # --- A. REGIONAL PERFORMANCE (Source: Region Performance Comparison.csv) ---
 df_regional = pd.DataFrame({
     'Region': ['Central', 'East Coast', 'Northern', 'Sabah', 'Sarawak', 'Southern'],
-    'Pass': [35, 26, 62, 21, 48, 59],
-    'Fail': [97, 19, 65, 45, 12, 44],
+    'Pass': [35, 26, 62, 22, 48, 59],
+    'Fail': [97, 19, 65, 44, 12, 44],
     'Total Headcount': [132, 45, 127, 66, 60, 103]
 })
 
@@ -117,7 +117,7 @@ data_outlets = [
     {'Outlet': 'SWLBFP', 'Pass': 0, 'Fail': 5, 'Total': 5, 'Region': 'Sabah'},
     {'Outlet': 'SWSBCC', 'Pass': 0, 'Fail': 3, 'Total': 3, 'Region': 'Sabah'},
     {'Outlet': 'SWSBCM', 'Pass': 2, 'Fail': 3, 'Total': 5, 'Region': 'Sabah'},
-    {'Outlet': 'SWSBKK', 'Pass': 1, 'Fail': 3, 'Total': 4, 'Region': 'Sabah'},
+    {'Outlet': 'SWSBKK', 'Pass': 3, 'Fail': 1, 'Total': 4, 'Region': 'Sabah'},
     {'Outlet': 'TW', 'Pass': 4, 'Fail': 3, 'Total': 7, 'Region': 'Sabah'},
     
     # Sarawak
@@ -145,7 +145,7 @@ df_lob = pd.DataFrame({
     ],
     'Central': [84, 48, 84, 48, 97, 35],
     'Sarawak': [27, 33, 21, 39, 12, 48],
-    'Sabah': [43, 23, 44, 22, 45, 21],
+    'Sabah': [43, 23, 44, 22, 44, 22],
     'East Coast': [20, 25, 24, 21, 19, 26],
     'Southern': [69, 34, 67, 36, 44, 59],
     'Northern': [64, 64, 57, 70, 65, 62]
@@ -170,7 +170,7 @@ def process_lob_data(df):
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.image("Main Banner.png")
-    st.header("SSC 2026 : Explorer iPhone & Apple Watch")
+    st.header("SSC 2026 : Explorer Mac")
     view_selection = st.selectbox(
         "Select Dataset:",
         ["Regional Performance", "Outlet Performance", "LOB Comparison"]
